@@ -1,0 +1,146 @@
+minimumLimaVersion: 1.1.0
+
+containerd:
+  system: false
+  user: false
+provision:
+- mode: system
+  script: |
+    #!/bin/bash
+    set -eux -o pipefail
+    command -v podman >/dev/null 2>&1 && test -e /etc/lima-podman && exit 0
+    if [ ! -e /etc/systemd/system/podman.socket.d/override.conf ]; then
+      mkdir -p /etc/systemd/system/podman.socket.d
+      cat <<-EOF >/etc/systemd/system/podman.socket.d/override.conf
+      [Socket]
+      SocketUser={{.User}}
+    EOF
+    fi
+    if [ ! -e /etc/tmpfiles.d/podman.conf ]; then
+      mkdir -p /etc/tmpfiles.d
+      echo "d /run/podman 0700 {{.User}} -" > /etc/tmpfiles.d/podman.conf
+    fi
+    dnf -y install --best podman && touch /etc/lima-podman
+- mode: system
+  script: |
+    #!/bin/bash
+    set -eux -o pipefail
+    systemctl --system enable --now podman.socket
+- mode: user
+  script: |
+    #!/bin/bash
+    set -euxo pipefail
+    if command -v kind >/dev/null 2>&1 && sudo kind get clusters | grep -q "^multinode$"; then
+      sudo podman start --all && sleep 60
+    else
+      [ "$(uname -m)" = aarch64 ] && curl -s -Lo ./kind https://kind.sigs.k8s.io/dl/v0.29.0/kind-linux-arm64
+      chmod +x ./kind
+      sudo mv ./kind /usr/local/bin/kind
+      sudo kind create cluster --name multinode --config /common/multinode.yaml
+      mkdir -p ~/.kube
+      sudo kind get kubeconfig --name multinode > ~/.kube/config
+    fi
+- mode: user
+  script: |
+    #!/bin/bash
+    set -eux -o pipefail
+    if ! command -v kubectl >/dev/null 2>&1; then
+      cat <<EOF | sudo tee /etc/yum.repos.d/kubernetes.repo
+    [kubernetes]
+    name=Kubernetes
+    baseurl=https://pkgs.k8s.io/core:/stable:/v1.33/rpm/
+    enabled=1
+    gpgcheck=1
+    gpgkey=https://pkgs.k8s.io/core:/stable:/v1.33/rpm/repodata/repomd.xml.key
+    EOF
+      sudo dnf install -y kubectl helm
+    else
+      echo "kubectl is already installed"
+    fi
+- mode: user
+  script: |
+    #!/bin/bash
+    set -eux -o pipefail
+    if ! helm status cilium -n kube-system >/dev/null 2>&1; then
+      helm repo add cilium https://helm.cilium.io/
+      sudo podman pull quay.io/cilium/cilium:v1.17.5
+      sudo podman save quay.io/cilium/cilium:v1.17.5 -o cilium-v1.17.5.tar
+      sudo kind load image-archive cilium-v1.17.5.tar --name multinode
+      API_SERVER_IP=$(kubectl get pods -A -o wide | grep apiserver | awk '{print $7}')
+      API_SERVER_PORT=6443
+      helm install cilium cilium/cilium \
+        --version 1.17.5 \
+        --namespace kube-system \
+        --set image.pullPolicy=IfNotPresent \
+        --set ipam.mode=kubernetes \
+        --set kubeProxyReplacement=true \
+        --set k8sServiceHost=${API_SERVER_IP} \
+        --set k8sServicePort=${API_SERVER_PORT}
+    else
+      echo "Cilium Helm release already installed in kube-system namespace. Skipping install."
+    fi
+- mode: user
+  script: |
+    #!/bin/bash
+    set -eux -o pipefail
+    #if ! kubectl get ns metallb-system >/dev/null 2>&1; then
+    if ! kubectl get pods -n metallb-system --selector=component=controller | grep -e "^controller"; then
+      kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.15.2/config/manifests/metallb-native.yaml
+      kubectl wait --namespace metallb-system \
+        --for=condition=Ready pod \
+        --selector=component=controller \
+        --timeout=300s
+      kubectl apply -f /common/metallb_address_pool.yaml
+    else
+      echo "MetalLB is already installed. Skipping."
+    fi
+probes:
+- script: |
+    #!/bin/bash
+    set -eux -o pipefail
+    if ! timeout 30s bash -c "until command -v podman >/dev/null 2>&1; do sleep 3; done"; then
+      echo >&2 "podman is not installed yet"
+      exit 1
+    fi
+  hint: See "/var/log/cloud-init-output.log" in the guest
+portForwards:
+- guestSocket: "/run/podman/podman.sock"
+  hostSocket: "{{.Dir}}/sock/podman.sock"
+message: |
+  To run `podman` on the host (assumes podman-remote is installed), run the following commands:
+  ------
+  podman system connection add lima-{{.Name}} "unix://{{.Dir}}/sock/podman.sock"
+  podman system connection default lima-{{.Name}}
+  podman{{if eq .HostOS "linux"}} --remote{{end}} run quay.io/podman/hello
+  ------
+
+images:
+- location: https://download.fedoraproject.org/pub/fedora/linux/releases/41/Cloud/aarch64/images/Fedora-Cloud-Base-Generic-41-1.4.aarch64.qcow2
+  arch: aarch64
+  digest: sha256:085883b42c7e3b980e366a1fe006cd0ff15877f7e6e984426f3c6c67c7cc2faa
+
+# 9p is broken in Linux v6.9, v6.10, and v6.11 (used by Fedora 41).
+# The issue was fixed in Linux v6.12-rc5 (https://github.com/torvalds/linux/commit/be2ca38).
+mountTypesUnsupported: [9p]
+mounts:
+- location: "~"
+
+- location: "/opt/lima/common"
+  mountPoint: /common
+  writable: false
+
+- location: "/opt/lima/storage"
+  mountPoint: /storage
+  writable: true
+
+- location: "{{.GlobalTempDir}}/lima"
+  mountPoint: /tmp/lima
+  writable: true
+cpus: 4
+memory: 4GiB
+networks:
+- lima: shared
+  macAddress: "12:34:45:78:9A:BC"
+arch: aarch64
+disk: 40GiB
+vmType: qemu

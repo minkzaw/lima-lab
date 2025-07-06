@@ -1,0 +1,46 @@
+# Homebrew installation
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+# Lima installation
+brew install lima
+
+# socket_vmnet installation (host-host, vm-vm and host-vm)
+cd /opt/
+# Install socket_vmnet as root from source to /opt/socket_vmnet
+# using instructions on https://github.com/lima-vm/socket_vmnet
+# This assumes that Xcode Command Line Tools are already installed
+sudo git clone https://github.com/lima-vm/socket_vmnet
+cd socket_vmnet
+# Change "v1.2.0" to the actual latest release in https://github.com/lima-vm/socket_vmnet/releases
+sudo make PREFIX=/opt/socket_vmnet install.bin
+
+# grant lima sudoer for the socket_vmnet
+cd ~/.lima/
+# Set up the sudoers file for launching socket_vmnet from Lima
+limactl sudoers >etc_sudoers.d_lima
+less etc_sudoers.d_lima  # verify that the file looks correct
+sudo install -o root etc_sudoers.d_lima /etc/sudoers.d/lima
+rm etc_sudoers.d_lima
+
+# Troubleshooting for the socket_vmnet if IP is not assign by DHCP
+sudo /usr/libexec/ApplicationFirewall/socketfilterfw --remove /usr/libexec/bootpd
+sudo /usr/libexec/ApplicationFirewall/socketfilterfw --add /usr/libexec/bootpd
+/usr/libexec/ApplicationFirewall/socketfilterfw --unblock /usr/libexec/bootpd
+
+# Add /etc/booptab
+sudo tee /etc/bootptab > /dev/null <<EOF
+# hostname      hwtype  hwaddr              ipaddr          bootfile
+tmp-vm01        1       52:55:55:12:34:05   192.168.105.110
+kind-multinode  1       52:55:55:12:34:06   192.168.105.111
+EOF
+
+# Create sample tpm-vm01
+limactl create --set='.networks[].macAddress="52:55:55:12:34:05"' --name test-vm01 --network lima:shared --cpus 1 --memory 1 --disk 5 --vm-type qemu --arch aarch64
+
+
+# Prepare the configs for cilium powered multinodes kind cluster.
+mkdir -p /opt/lima/common /opt/lima/storage
+cp -r ./common /opt/lima/common/
+
+# Bootstrap kind cluster
+limactl create --set='.networks[].macAddress="52:55:55:12:34:06"' --name kind-multinode templates/kind-multinode-cilium.yaml
