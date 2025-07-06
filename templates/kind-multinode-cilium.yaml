@@ -75,7 +75,10 @@ provision:
         --set ipam.mode=kubernetes \
         --set kubeProxyReplacement=true \
         --set k8sServiceHost=${API_SERVER_IP} \
-        --set k8sServicePort=${API_SERVER_PORT}
+        --set k8sServicePort=${API_SERVER_PORT} \
+        --set l2announcements.enabled=true \
+        --set l2announcements.interfaces[0]=eth0 \
+        --set externalIPs.enabled=true
     else
       echo "Cilium Helm release already installed in kube-system namespace. Skipping install."
     fi
@@ -83,17 +86,7 @@ provision:
   script: |
     #!/bin/bash
     set -eux -o pipefail
-    #if ! kubectl get ns metallb-system >/dev/null 2>&1; then
-    if ! kubectl get pods -n metallb-system --selector=component=controller | grep -e "^controller"; then
-      kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.15.2/config/manifests/metallb-native.yaml
-      kubectl wait --namespace metallb-system \
-        --for=condition=Ready pod \
-        --selector=component=controller \
-        --timeout=300s
-      kubectl apply -f /common/metallb_address_pool.yaml
-    else
-      echo "MetalLB is already installed. Skipping."
-    fi
+    kubectl wait -n kube-system --selector=app.kubernetes.io/name=cilium-agent --for=condition=Ready pod --timeout=600s && kubectl apply -f /common/cilium_lb_pool.yaml
 probes:
 - script: |
     #!/bin/bash
@@ -115,9 +108,11 @@ message: |
   ------
 
 images:
-- location: https://download.fedoraproject.org/pub/fedora/linux/releases/41/Cloud/aarch64/images/Fedora-Cloud-Base-Generic-41-1.4.aarch64.qcow2
+#- location: https://download.fedoraproject.org/pub/fedora/linux/releases/41/Cloud/aarch64/images/Fedora-Cloud-Base-Generic-41-1.4.aarch64.qcow2
+- location: https://download.fedoraproject.org/pub/fedora/linux/releases/42/Cloud/aarch64/images/Fedora-Cloud-Base-Generic-42-1.1.aarch64.qcow2
   arch: aarch64
-  digest: sha256:085883b42c7e3b980e366a1fe006cd0ff15877f7e6e984426f3c6c67c7cc2faa
+#  digest: sha256:085883b42c7e3b980e366a1fe006cd0ff15877f7e6e984426f3c6c67c7cc2faa
+  digest: sha256:e10658419a8d50231037dc781c3155aa94180a8c7a74e5cac2a6b09eaa9342b7
 
 # 9p is broken in Linux v6.9, v6.10, and v6.11 (used by Fedora 41).
 # The issue was fixed in Linux v6.12-rc5 (https://github.com/torvalds/linux/commit/be2ca38).
