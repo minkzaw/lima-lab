@@ -79,6 +79,7 @@ provision:
         --set l2announcements.enabled=true \
         --set l2announcements.interfaces[0]=eth0 \
         --set externalIPs.enabled=true
+      kubectl wait -n kube-system --selector=app.kubernetes.io/name=cilium-agent --for=condition=Ready pod --timeout=600s && kubectl apply -f /common/cilium_lb_pool.yaml
     else
       echo "Cilium Helm release already installed in kube-system namespace. Skipping install."
     fi
@@ -86,7 +87,19 @@ provision:
   script: |
     #!/bin/bash
     set -eux -o pipefail
-    kubectl wait -n kube-system --selector=app.kubernetes.io/name=cilium-agent --for=condition=Ready pod --timeout=600s && kubectl apply -f /common/cilium_lb_pool.yaml
+    if ! kubectl get crds | grep gateway >/dev/null 2>&1; then
+      kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/refs/heads/main/config/crd/standard/gateway.networking.k8s.io_gatewayclasses.yaml
+      kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/refs/heads/main/config/crd/standard/gateway.networking.k8s.io_gateways.yaml
+      kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/refs/heads/main/config/crd/standard/gateway.networking.k8s.io_grpcroutes.yaml
+      kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/refs/heads/main/config/crd/standard/gateway.networking.k8s.io_httproutes.yaml
+      kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/refs/heads/main/config/crd/standard/gateway.networking.k8s.io_referencegrants.yaml
+      helm upgrade cilium cilium/cilium --version 1.17.5 \
+        --namespace kube-system \
+        --reuse-values \
+        --set gatewayAPI.enabled=true
+      kubectl rollout restart -n kube-system deploy/cilium-operator ds/cilium
+      kubectl wait -n kube-system --selector=app.kubernetes.io/name=cilium-agent --for=condition=Ready pod --timeout=600s
+    fi
 probes:
 - script: |
     #!/bin/bash
