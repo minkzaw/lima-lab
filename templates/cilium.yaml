@@ -145,7 +145,7 @@ memory: 4GiB
 
 networks:
 - lima: shared
-  macAddress: "12:34:45:78:9A:BC"
+  macAddress: "52:55:55:12:34:07"
 
 arch: aarch64
 
