@@ -43,4 +43,4 @@ mkdir -p /opt/lima/common /opt/lima/storage
 cp -r ./common /opt/lima/common/
 
 # Bootstrap kind cluster
-limactl create --set='.networks[].macAddress="52:55:55:12:34:06"' --name kind-multinode templates/kind-multinode-cilium.yaml
+limactl create --set='.networks[].macAddress="52:55:55:12:34:09"' --name kind-multinode templates/kind-multinode-cilium.yaml
