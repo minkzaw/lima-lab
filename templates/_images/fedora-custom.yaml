@@ -1,0 +1,7 @@
+images:
+
+- location: https://mirror.freedif.org/fedora/fedora/linux/releases/42/Cloud/aarch64/images/Fedora-Cloud-Base-Generic-42-1.1.aarch64.qcow2
+  arch: aarch64
+  digest: sha256:e10658419a8d50231037dc781c3155aa94180a8c7a74e5cac2a6b09eaa9342b7
+
+mountTypesUnsupported: [9p]

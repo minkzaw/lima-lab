@@ -1,8 +1,13 @@
 minimumLimaVersion: 1.1.0
 
+base:
+- template://_images/fedora-custom
+- template://_default/mounts
+
 containerd:
   system: false
   user: false
+
 provision:
 - mode: system
   script: |
@@ -101,6 +106,7 @@ provision:
       kubectl rollout restart -n kube-system deploy/cilium-operator ds/cilium
       kubectl wait -n kube-system --selector=app.kubernetes.io/name=cilium-agent --for=condition=Ready pod --timeout=600s
     fi
+
 probes:
 - script: |
     #!/bin/bash
@@ -110,46 +116,39 @@ probes:
       exit 1
     fi
   hint: See "/var/log/cloud-init-output.log" in the guest
+
 portForwards:
 - guestSocket: "/run/podman/podman.sock"
   hostSocket: "{{.Dir}}/sock/podman.sock"
+
 message: |
-  To run `podman` on the host (assumes podman-remote is installed), run the following commands:
   ------
-  podman system connection add lima-{{.Name}} "unix://{{.Dir}}/sock/podman.sock"
-  podman system connection default lima-{{.Name}}
-  podman{{if eq .HostOS "linux"}} --remote{{end}} run quay.io/podman/hello
+  Your VM is ready to use with kubectl and cilium installed with kube-proxy replacement.
+  Happy LIMA!!!
   ------
 
-images:
-#- location: https://download.fedoraproject.org/pub/fedora/linux/releases/41/Cloud/aarch64/images/Fedora-Cloud-Base-Generic-41-1.4.aarch64.qcow2
-- location: https://download.fedoraproject.org/pub/fedora/linux/releases/42/Cloud/aarch64/images/Fedora-Cloud-Base-Generic-42-1.1.aarch64.qcow2
-  arch: aarch64
-#  digest: sha256:085883b42c7e3b980e366a1fe006cd0ff15877f7e6e984426f3c6c67c7cc2faa
-  digest: sha256:e10658419a8d50231037dc781c3155aa94180a8c7a74e5cac2a6b09eaa9342b7
-
-# 9p is broken in Linux v6.9, v6.10, and v6.11 (used by Fedora 41).
-# The issue was fixed in Linux v6.12-rc5 (https://github.com/torvalds/linux/commit/be2ca38).
-mountTypesUnsupported: [9p]
 mounts:
 - location: "~"
-
 - location: "/opt/lima/common"
   mountPoint: /common
   writable: false
-
 - location: "/opt/lima/storage"
   mountPoint: /storage
   writable: true
-
 - location: "{{.GlobalTempDir}}/lima"
   mountPoint: /tmp/lima
   writable: true
+
 cpus: 4
+
 memory: 4GiB
+
 networks:
 - lima: shared
   macAddress: "12:34:45:78:9A:BC"
+
 arch: aarch64
+
 disk: 40GiB
+
 vmType: qemu

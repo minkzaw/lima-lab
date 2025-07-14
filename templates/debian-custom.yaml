@@ -1,5 +1,9 @@
 minimumLimaVersion: 1.1.0
 
+base:
+- template://_images/debian-custom
+- template://_default/mounts
+
 containerd:
   system: false
   user: false
@@ -27,7 +31,7 @@ provision:
     #!/bin/bash
     set -eux -o pipefail
     systemctl --system enable --now podman.socket
-- mode: user
+- mode: system
   script: |
     #!/bin/bash
     set -euxo pipefail
@@ -41,7 +45,7 @@ provision:
       mkdir -p ~/.kube
       sudo kind get kubeconfig --name multinode > ~/.kube/config
     fi
-- mode: user
+- mode: system
   script: |
     #!/bin/bash
     set -eux -o pipefail
@@ -59,29 +63,24 @@ provision:
       echo "kubectl is already installed"
     fi
 
-images:
-- location: https://cloud.debian.org/images/cloud/bookworm/latest/debian-12-genericcloud-arm64.qcow2
-  arch: aarch64
-  digest: sha512:95f72a3dbc9bbe261aee622ffe0c1b89085d843c9631b720738557a3640e229847deee7f0f87a29b566bf56ba7ecdc9010fb4b844c3477ca76a00865cf016fc1
-
-mountTypesUnsupported: [9p]
 mounts:
-- location: "~"
 - location: "/opt/lima/common"
   mountPoint: /common
   writable: false
 - location: "/opt/lima/storage"
   mountPoint: /storage
   writable: true
-- location: "{{.GlobalTempDir}}/lima"
-  mountPoint: /tmp/lima
-  writable: true
 
 cpus: 4
+
 memory: 4GiB
+
 networks:
 - lima: shared
   macAddress: "52:55:55:12:34:09"
+
 arch: aarch64
+
 disk: 40GiB
+
 vmType: qemu
