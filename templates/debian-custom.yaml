@@ -31,7 +31,7 @@ provision:
     #!/bin/bash
     set -eux -o pipefail
     systemctl --system enable --now podman.socket
-- mode: system
+- mode: user
   script: |
     #!/bin/bash
     set -euxo pipefail
@@ -45,7 +45,7 @@ provision:
       mkdir -p ~/.kube
       sudo kind get kubeconfig --name multinode > ~/.kube/config
     fi
-- mode: system
+- mode: user
   script: |
     #!/bin/bash
     set -eux -o pipefail
