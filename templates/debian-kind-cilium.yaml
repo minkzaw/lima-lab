@@ -1,7 +1,7 @@
 minimumLimaVersion: 1.1.0
 
 base:
-- template://_images/fedora-custom
+- template://_images/debian-custom
 - template://_default/mounts
 
 containerd:
@@ -25,7 +25,7 @@ provision:
       mkdir -p /etc/tmpfiles.d
       echo "d /run/podman 0700 {{.User}} -" > /etc/tmpfiles.d/podman.conf
     fi
-    dnf -y install --best podman && touch /etc/lima-podman
+    apt install -y podman crun && touch /etc/lima-podman
 - mode: system
   script: |
     #!/bin/bash
@@ -41,7 +41,7 @@ provision:
       [ "$(uname -m)" = aarch64 ] && curl -s -Lo ./kind https://kind.sigs.k8s.io/dl/v0.29.0/kind-linux-arm64
       chmod +x ./kind
       sudo mv ./kind /usr/local/bin/kind
-      sudo kind create cluster --name multinode --config /common/multinode.yaml
+      sudo kind create cluster --name multinode --config=/common/multinode.yaml
       mkdir -p ~/.kube
       sudo kind get kubeconfig --name multinode > ~/.kube/config
     fi
@@ -50,15 +50,15 @@ provision:
     #!/bin/bash
     set -eux -o pipefail
     if ! command -v kubectl >/dev/null 2>&1; then
-      cat <<EOF | sudo tee /etc/yum.repos.d/kubernetes.repo
-    [kubernetes]
-    name=Kubernetes
-    baseurl=https://pkgs.k8s.io/core:/stable:/v1.33/rpm/
-    enabled=1
-    gpgcheck=1
-    gpgkey=https://pkgs.k8s.io/core:/stable:/v1.33/rpm/repodata/repomd.xml.key
-    EOF
-      sudo dnf install -y kubectl helm
+      sudo apt-get install apt-transport-https --yes
+      curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.33/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+      curl https://baltocdn.com/helm/signing.asc | gpg --dearmor | sudo tee /usr/share/keyrings/helm.gpg > /dev/null
+      sudo chmod 644 /etc/apt/keyrings/kubernetes-apt-keyring.gpg # allow unprivileged APT programs to read this keyring
+      echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.33/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes.list
+      echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/helm.gpg] https://baltocdn.com/helm/stable/debian/ all main" | sudo tee /etc/apt/sources.list.d/helm-stable-debian.list
+      sudo chmod 644 /etc/apt/sources.list.d/kubernetes.list   # helps tools such as command-not-found to work correctly
+      sudo apt-get update
+      sudo apt-get install -y kubectl helm
     else
       echo "kubectl is already installed"
     fi
@@ -139,16 +139,16 @@ mounts:
   mountPoint: /tmp/lima
   writable: true
 
-cpus: 4
+cpus: 5
 
-memory: 4GiB
+memory: 8GiB
 
 networks:
 - lima: shared
-  macAddress: "52:55:55:12:34:07"
+  macAddress: "52:55:55:12:34:01"
 
 arch: aarch64
 
-disk: 40GiB
+disk: 100GiB
 
 vmType: qemu

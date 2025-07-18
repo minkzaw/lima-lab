@@ -4,7 +4,7 @@ metadata:
   name: "research-pool"
 spec:
   blocks:
-    - start: "10.89.0.240"
+    - start: "10.89.0.230"
       stop: "10.89.0.254"
 ---
 apiVersion: "cilium.io/v2alpha1"
