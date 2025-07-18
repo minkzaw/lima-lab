@@ -31,7 +31,7 @@ sudo /usr/libexec/ApplicationFirewall/socketfilterfw --add /usr/libexec/bootpd
 sudo tee /etc/bootptab > /dev/null <<EOF
 # hostname      hwtype  hwaddr              ipaddr          bootfile
 tmp-vm01        1       52:55:55:12:34:05   192.168.105.110
-kind-multinode  1       52:55:55:12:34:06   192.168.105.111
+<hostname>      1       52:55:55:12:34:01   192.168.105.101
 EOF
 
 # Create sample tpm-vm01
@@ -42,6 +42,8 @@ limactl create --set='.networks[].macAddress="52:55:55:12:34:05"' --name test-vm
 mkdir -p /opt/lima/common /opt/lima/storage
 cp -r ./common /opt/lima/common/
 
+# Copy the template and image to lima
+cp -r templates/ /opt/homebrew/share/lima/templates
+
 # Bootstrap kind cluster
-# limactl create --set='.networks[].macAddress="52:55:55:12:34:09"' --name kind-multinode templates/kind-multinode-cilium.yaml
-limactl start --name cilium template://cilium --timeout 60m
+limactl start --name <hostname> template://debian-kind-cilium --timeout 60m
