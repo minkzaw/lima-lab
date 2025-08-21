@@ -38,7 +38,7 @@ provision:
     if command -v kind >/dev/null 2>&1 && sudo kind get clusters | grep -q "^multinode$"; then
       sudo podman start --all && sleep 60
     else
-      [ "$(uname -m)" = aarch64 ] && curl -s -Lo ./kind https://kind.sigs.k8s.io/dl/v0.29.0/kind-linux-arm64
+      [ $(uname -m) = aarch64 ] && curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.29.0/kind-$(uname)-arm64
       chmod +x ./kind
       sudo mv ./kind /usr/local/bin/kind
       sudo kind create cluster --name multinode --config=/common/multinode.yaml
@@ -63,10 +63,22 @@ provision:
   script: |
     #!/bin/bash
     set -eux -o pipefail
+    if ! kubectl get crds | grep gateway >/dev/null 2>&1; then
+      kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/refs/heads/main/config/crd/standard/gateway.networking.k8s.io_gatewayclasses.yaml
+      kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/refs/heads/main/config/crd/standard/gateway.networking.k8s.io_gateways.yaml
+      kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/refs/heads/main/config/crd/standard/gateway.networking.k8s.io_grpcroutes.yaml
+      kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/refs/heads/main/config/crd/standard/gateway.networking.k8s.io_httproutes.yaml
+      kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/refs/heads/main/config/crd/standard/gateway.networking.k8s.io_referencegrants.yaml
+      kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/refs/heads/main/config/crd/experimental/gateway.networking.k8s.io_tlsroutes.yaml
+    fi
+- mode: user
+  script: |
+    #!/bin/bash
+    set -eux -o pipefail
     if ! kubectl get daemonset -n kube-system cilium >/dev/null 2>&1; then
-      sudo podman pull quay.io/cilium/cilium:v1.17.5
-      sudo podman save quay.io/cilium/cilium:v1.17.5 -o cilium-v1.17.5.tar
-      sudo kind load image-archive cilium-v1.17.5.tar --name multinode
+      sudo podman pull quay.io/cilium/cilium:v1.18.1
+      sudo podman save quay.io/cilium/cilium:v1.18.1 -o cilium-v1.18.1.tar
+      sudo kind load image-archive cilium-v1.18.1.tar --name multinode
       CILIUM_CLI_VERSION=$(curl -s https://raw.githubusercontent.com/cilium/cilium-cli/main/stable.txt)
       CLI_ARCH=amd64
       if [ "$(uname -m)" = "aarch64" ]; then CLI_ARCH=arm64; fi
@@ -75,26 +87,13 @@ provision:
       sudo tar xzvfC cilium-linux-${CLI_ARCH}.tar.gz /usr/local/bin
       rm cilium-linux-${CLI_ARCH}.tar.gz{,.sha256sum}
       # Install Cilium using CLI
-      cilium install --version 1.17.5 --set image.pullPolicy=IfNotPresent --set l2announcements.enabled=true --set l2announcements.interfaces[0]=eth0 --set externalIPs.enabled=true --set gatewayAPI.enabled=true
+      cilium install --version 1.18.1 --set image.pullPolicy=IfNotPresent --set l2announcements.enabled=true --set l2announcements.interfaces[0]=eth0 --set externalIPs.enabled=true --set gatewayAPI.enabled=true
       # Wait for Cilium pods to be ready
       kubectl wait -n kube-system --selector=app.kubernetes.io/name=cilium-agent --for=condition=Ready pod --timeout=600s
       # Apply Cilium LB pool config
       kubectl apply -f /common/cilium_lb_pool.yaml
     else
       echo "Cilium is already installed. Skipping."
-    fi
-- mode: user
-  script: |
-    #!/bin/bash
-    set -eux -o pipefail
-    if ! kubectl get crds | grep gateway >/dev/null 2>&1; then
-      kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/refs/heads/main/config/crd/standard/gateway.networking.k8s.io_gatewayclasses.yaml
-      kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/refs/heads/main/config/crd/standard/gateway.networking.k8s.io_gateways.yaml
-      kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/refs/heads/main/config/crd/standard/gateway.networking.k8s.io_grpcroutes.yaml
-      kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/refs/heads/main/config/crd/standard/gateway.networking.k8s.io_httproutes.yaml
-      kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/refs/heads/main/config/crd/standard/gateway.networking.k8s.io_referencegrants.yaml
-      kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/refs/heads/main/config/crd/experimental/gateway.networking.k8s.io_tlsroutes.yaml
-      kubectl wait -n kube-system --selector=app.kubernetes.io/name=cilium-agent --for=condition=Ready pod --timeout=600s
     fi
 
 probes:
